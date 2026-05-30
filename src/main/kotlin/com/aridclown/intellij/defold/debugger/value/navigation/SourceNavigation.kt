@@ -2,8 +2,7 @@ package com.aridclown.intellij.defold.debugger.value.navigation
 
 import com.aridclown.intellij.defold.DefoldConstants.ELLIPSIS_VAR
 import com.intellij.openapi.application.runReadAction
-import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.fileEditor.TextEditor
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiManager
@@ -16,6 +15,9 @@ import com.tang.intellij.lua.psi.*
 /**
  * EmmyLua2 no longer provides the declaration helper our debugger relied on. We map names to PSI
  * using small strategies so each special case (like `...`) stays isolated and easily testable.
+ *
+ * Called off-EDT from the debugger; `FileEditorManager.getSelectedEditor` requires the EDT,
+ * so resolve the document via `FileDocumentManager` (thread-safe under a read action) instead.
  */
 fun navigateToLocalDeclaration(
     project: Project,
@@ -25,8 +27,7 @@ fun navigateToLocalDeclaration(
 ) = runReadAction {
     val file = framePosition.file
     val psiFile = PsiManager.getInstance(project).findFile(file) ?: return@runReadAction
-    val editor = FileEditorManager.getInstance(project).getSelectedEditor(file) as? TextEditor ?: return@runReadAction
-    val document = editor.editor.document
+    val document = FileDocumentManager.getInstance().getDocument(file) ?: return@runReadAction
     if (framePosition.line !in 0 until document.lineCount) return@runReadAction
     val lineStartOffset = document.getLineStartOffset(framePosition.line)
     val element = psiFile.findElementAt(lineStartOffset) ?: return@runReadAction

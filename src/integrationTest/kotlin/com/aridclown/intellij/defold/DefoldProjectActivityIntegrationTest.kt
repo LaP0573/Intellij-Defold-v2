@@ -63,7 +63,7 @@ class DefoldProjectActivityIntegrationTest {
         coJustRun { mockManager.ensureAnnotationsAttached() }
         every { DefoldAnnotationsManager.getInstance(any()) } returns mockManager
         mockkObject(DefoldPathResolver)
-        every { DefoldPathResolver.ensureEditorConfig(any()) } returns mockk(relaxed = true)
+        every { DefoldPathResolver.ensureEditorConfigOrNotify(any()) } returns mockk(relaxed = true)
         mockkObject(DependencyResolver)
         coEvery { DependencyResolver.resolve(any(), any()) } returns Unit
     }

@@ -5,6 +5,7 @@ import com.intellij.execution.ui.ConsoleView
 import com.intellij.execution.ui.ConsoleViewContentType.ERROR_OUTPUT
 import com.intellij.execution.ui.ConsoleViewContentType.NORMAL_OUTPUT
 import com.intellij.openapi.project.Project
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -74,7 +75,7 @@ class ProjectRunnerHttpTest {
     fun `reports unsupported editor command as a failure instead of falling back to bob`(): Unit = runBlocking {
         mockkObject(EditorHttpClient.Companion)
         val client = mockk<EditorHttpClient>()
-        every { EditorHttpClient.connect(any()) } returns client
+        coEvery { EditorHttpClient.connect(any()) } returns client
         every { client.supports("build") } returns false
 
         val result = ProjectRunner.runViaEditor(
@@ -90,9 +91,9 @@ class ProjectRunnerHttpTest {
         mockkObject(EditorHttpClient.Companion)
 
         val client = mockk<EditorHttpClient>()
-        every { EditorHttpClient.connect(any()) } returns client
+        coEvery { EditorHttpClient.connect(any()) } returns client
         every { client.supports("build") } returns true
-        every { client.sendCommand("build") } returns true
+        coEvery { client.sendCommand("build") } returns true
 
         var terminationCode: Int? = null
         val console = mockk<ConsoleView>(relaxed = true)
