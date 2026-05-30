@@ -275,6 +275,50 @@ class DefoldPathResolverTest {
         }
     }
 
+    @Nested
+    inner class StartupNonModal {
+        @Test
+        fun `returns config without prompting when path configured`() {
+            val expectedConfig = mockk<DefoldEditorConfig>()
+            every { DefoldEditorConfig.loadEditorConfig() } returns expectedConfig
+
+            val result = DefoldPathResolver.ensureEditorConfigOrNotify(project)
+
+            assertThat(result).isEqualTo(expectedConfig)
+            verify(exactly = 0) { yesNoBuilder.ask(any<Project>()) }
+            verify(exactly = 0) { notification.notify(any()) }
+        }
+
+        @Test
+        fun `never opens a modal dialog when config missing — posts a non-modal notification`() {
+            mockInvalidConfig(installPath = "/custom/path")
+
+            val result = DefoldPathResolver.ensureEditorConfigOrNotify(project)
+
+            assertThat(result).isNull()
+            // Startup must not block the EDT: no modal yes/no dialog is shown and settings are
+            // not opened synchronously. The user is prompted via a non-modal balloon instead.
+            verify(exactly = 0) { yesNoBuilder.ask(any<Project>()) }
+            verifySettingsNotOpened()
+            verify(exactly = 1) { notification.notify(any()) }
+        }
+
+        @Test
+        fun `notification has a Configure action that opens settings`() {
+            mockInvalidConfig()
+
+            DefoldPathResolver.ensureEditorConfigOrNotify(project)
+
+            verify(exactly = 1) {
+                notification.addAction(
+                    match {
+                        it.templateText == "Configure"
+                    }
+                )
+            }
+        }
+    }
+
     private fun mockInvalidConfig(
         installPath: String? = "/some/path",
         platform: Platform = Platform.MACOS,

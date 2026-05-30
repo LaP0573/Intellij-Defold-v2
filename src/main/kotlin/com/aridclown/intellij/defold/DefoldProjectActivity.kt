@@ -5,7 +5,6 @@ import com.aridclown.intellij.defold.DefoldProjectService.Companion.isDefoldProj
 import com.aridclown.intellij.defold.actions.DefoldIdeActionsDisabler
 import com.aridclown.intellij.defold.util.trySilently
 import com.intellij.codeInsight.CodeInsightSettings
-import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.edtWriteAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileTypes.FileType
@@ -24,8 +23,6 @@ import com.intellij.openapi.vfs.VirtualFileManager.VFS_CHANGES
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileCreateEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
@@ -60,10 +57,11 @@ class DefoldProjectActivity : ProjectActivity {
     }
 
     private suspend fun resolveProjectDependencies(project: Project) {
-        // ensureEditorConfig is @RequiresEdt — bridge to the EDT via Dispatchers.EDT instead of
-        // the legacy Dispatchers.Main + Application.invokeAndWait combo that previously blocked
-        // the EDT during project startup.
-        val config = withContext(Dispatchers.EDT) { DefoldPathResolver.ensureEditorConfig(project) } ?: return
+        // Project startup must never block the EDT with a modal dialog. ensureEditorConfigOrNotify
+        // is non-blocking: if the Defold install path is not configured it posts a non-modal
+        // notification (with a Configure action) and returns null instead of prompting, so we
+        // simply skip dependency resolution until the user configures the path.
+        val config = DefoldPathResolver.ensureEditorConfigOrNotify(project) ?: return
         DependencyResolver.resolve(project, config)
     }
 
