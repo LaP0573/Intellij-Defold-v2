@@ -5,16 +5,22 @@ import com.aridclown.intellij.defold.settings.DefoldSettingsConfigurable
 import com.aridclown.intellij.defold.util.NotificationService.notify
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationType.ERROR
-import com.intellij.openapi.application.ApplicationManager.getApplication
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.intellij.util.concurrency.annotations.RequiresEdt
 
 object DefoldPathResolver {
+    /**
+     * Must be invoked from the EDT — both [Messages.showOkCancelDialog] and
+     * [ShowSettingsUtil.showSettingsDialog] are `@RequiresEdt`. Non-EDT callers (project
+     * startup, run/debug program runners) bridge via `withContext(Dispatchers.EDT) { ... }` so
+     * the EDT is never blocked by a non-suspend bridge such as `invokeAndWait`.
+     */
+    @RequiresEdt
     fun ensureEditorConfig(project: Project): DefoldEditorConfig? {
         val attemptedPath = effectiveInstallPath()
-        var config = DefoldEditorConfig.loadEditorConfig()
-        if (config != null) return config
+        DefoldEditorConfig.loadEditorConfig()?.let { return it }
 
         val message = buildString {
             append("The Defold installation path could not be located.")
@@ -37,11 +43,9 @@ object DefoldPathResolver {
 
         if (!openSettings) return null
 
-        getApplication().invokeAndWait {
-            ShowSettingsUtil.getInstance().showSettingsDialog(project, DefoldSettingsConfigurable::class.java)
-        }
+        ShowSettingsUtil.getInstance().showSettingsDialog(project, DefoldSettingsConfigurable::class.java)
 
-        config = DefoldEditorConfig.loadEditorConfig()
+        val config = DefoldEditorConfig.loadEditorConfig()
 
         if (config == null) {
             project.notify(
@@ -56,11 +60,9 @@ object DefoldPathResolver {
                 actions =
                 listOf(
                     NotificationAction.createSimple("Configure") {
-                        getApplication().invokeAndWait {
-                            ShowSettingsUtil
-                                .getInstance()
-                                .showSettingsDialog(project, DefoldSettingsConfigurable::class.java)
-                        }
+                        ShowSettingsUtil
+                            .getInstance()
+                            .showSettingsDialog(project, DefoldSettingsConfigurable::class.java)
                     }
                 )
             )

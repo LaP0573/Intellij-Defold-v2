@@ -3,6 +3,8 @@ package com.aridclown.intellij.defold
 import com.aridclown.intellij.defold.util.SimpleHttpClient
 import com.google.gson.JsonParser
 import com.intellij.openapi.diagnostic.Logger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import java.io.IOException
 import java.nio.file.Files
@@ -15,13 +17,13 @@ internal class EditorHttpClient private constructor(
 ) {
     fun supports(command: String): Boolean = availableCommands.contains(command)
 
-    fun sendCommand(command: String): Boolean {
+    suspend fun sendCommand(command: String): Boolean = withContext(Dispatchers.IO) {
         val url = baseUrl.newBuilder()
             .addPathSegment("command")
             .addPathSegment(command)
             .build()
 
-        return runCatching {
+        runCatching {
             SimpleHttpClient.postBytes(
                 url.toString(),
                 ByteArray(0),
@@ -37,8 +39,8 @@ internal class EditorHttpClient private constructor(
         private val logger = Logger.getInstance(EditorHttpClient::class.java)
         private val REQUEST_TIMEOUT = Duration.ofSeconds(5)
 
-        fun connect(projectPath: String): EditorHttpClient? {
-            val port = readEditorPort(projectPath) ?: return null
+        suspend fun connect(projectPath: String): EditorHttpClient? = withContext(Dispatchers.IO) {
+            val port = readEditorPort(projectPath) ?: return@withContext null
             val baseUrl = HttpUrl.Builder()
                 .scheme("http")
                 .host("127.0.0.1")
@@ -53,17 +55,17 @@ internal class EditorHttpClient private constructor(
                 SimpleHttpClient.get(commandUrl.toString(), REQUEST_TIMEOUT)
             } catch (e: IOException) {
                 logger.debug("Failed to query editor command endpoint", e)
-                return null
+                return@withContext null
             }
 
             if (response.code !in 200..299 || response.body.isNullOrEmpty()) {
-                return null
+                return@withContext null
             }
 
             val json = JsonParser.parseString(response.body).asJsonObject
             val commands = json.keySet()
 
-            return EditorHttpClient(baseUrl, commands)
+            EditorHttpClient(baseUrl, commands)
         }
 
         private fun readEditorPort(projectPath: String): Int? {

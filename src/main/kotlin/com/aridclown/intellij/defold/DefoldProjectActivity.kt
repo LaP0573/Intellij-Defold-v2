@@ -5,6 +5,7 @@ import com.aridclown.intellij.defold.DefoldProjectService.Companion.isDefoldProj
 import com.aridclown.intellij.defold.actions.DefoldIdeActionsDisabler
 import com.aridclown.intellij.defold.util.trySilently
 import com.intellij.codeInsight.CodeInsightSettings
+import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.edtWriteAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileTypes.FileType
@@ -59,7 +60,10 @@ class DefoldProjectActivity : ProjectActivity {
     }
 
     private suspend fun resolveProjectDependencies(project: Project) {
-        val config = withContext(Dispatchers.Main) { DefoldPathResolver.ensureEditorConfig(project) } ?: return
+        // ensureEditorConfig is @RequiresEdt — bridge to the EDT via Dispatchers.EDT instead of
+        // the legacy Dispatchers.Main + Application.invokeAndWait combo that previously blocked
+        // the EDT during project startup.
+        val config = withContext(Dispatchers.EDT) { DefoldPathResolver.ensureEditorConfig(project) } ?: return
         DependencyResolver.resolve(project, config)
     }
 

@@ -176,7 +176,6 @@ class DefoldPathResolverTest {
 
             DefoldPathResolver.ensureEditorConfig(project)
 
-            verify(exactly = 1) { application.invokeAndWait(any<Runnable>()) }
             verifySettingsOpened()
             verify(exactly = 1) { notification.notify(any()) }
         }
@@ -201,7 +200,7 @@ class DefoldPathResolverTest {
 
             assertThat(result).isNull()
             verify(exactly = 2) { DefoldEditorConfig.loadEditorConfig() }
-            verify(exactly = 1) { application.invokeAndWait(any<Runnable>()) }
+            verifySettingsOpened()
             verify(exactly = 1) { notification.addAction(any()) }
             verify(exactly = 1) { notification.notify(any()) }
         }

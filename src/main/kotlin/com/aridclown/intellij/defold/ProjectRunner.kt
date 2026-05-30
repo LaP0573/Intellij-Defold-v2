@@ -17,7 +17,6 @@ import com.intellij.execution.configurations.GeneralCommandLine.ParentEnvironmen
 import com.intellij.execution.configurations.GeneralCommandLine.ParentEnvironmentType.NONE
 import com.intellij.execution.ui.ConsoleView
 import com.intellij.openapi.application.edtWriteAction
-import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
@@ -143,10 +142,12 @@ object ProjectRunner {
         return isInitDebugValueInvalid() || isInBuild
     }
 
-    private fun readIni(gameProjectFile: VirtualFile): Ini = runReadAction {
-        gameProjectFile.inputStream.use { input ->
-            createIni().apply { load(input) }
-        }
+    private fun readIni(gameProjectFile: VirtualFile): Ini {
+        // Read bytes outside any read lock — VirtualFile.contentsToByteArray is
+        // synchronized internally and does not require a read action, so IO is
+        // not performed while holding the platform read lock.
+        val bytes = gameProjectFile.contentsToByteArray()
+        return createIni().apply { bytes.inputStream().use(::load) }
     }
 
     private fun Ini.ensureBootstrapSection(): Section = this[INI_BOOTSTRAP_SECTION] ?: run {

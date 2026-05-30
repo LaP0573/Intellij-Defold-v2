@@ -4,6 +4,7 @@ import com.aridclown.intellij.defold.util.SimpleHttpClient
 import io.mockk.every
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
+import kotlinx.coroutines.runBlocking
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -17,7 +18,7 @@ class EditorHttpClientTest {
     }
 
     @Test
-    fun `connect returns client when command list available`() {
+    fun `connect returns client when command list available`(): Unit = runBlocking {
         val projectDir = Files.createTempDirectory("editorTest")
         writePortFile(projectDir, "8090")
         mockkObject(SimpleHttpClient)
@@ -30,7 +31,7 @@ class EditorHttpClientTest {
     }
 
     @Test
-    fun `connect returns null when endpoint fails`() {
+    fun `connect returns null when endpoint fails`(): Unit = runBlocking {
         val projectDir = Files.createTempDirectory("editorTest2")
         writePortFile(projectDir, "8091")
         mockkObject(SimpleHttpClient)
@@ -40,7 +41,7 @@ class EditorHttpClientTest {
     }
 
     @Test
-    fun `connect returns null when body missing`() {
+    fun `connect returns null when body missing`(): Unit = runBlocking {
         val projectDir = Files.createTempDirectory("editorTest3")
         writePortFile(projectDir, "8092")
         mockkObject(SimpleHttpClient)
@@ -50,7 +51,7 @@ class EditorHttpClientTest {
     }
 
     @Test
-    fun `sendCommand returns true on accepted command`() {
+    fun `sendCommand returns true on accepted command`(): Unit = runBlocking {
         val client = EditorHttpClientTestFactory.create()
         mockkObject(SimpleHttpClient)
         every { SimpleHttpClient.postBytes(any(), any(), any(), any()) } returns SimpleHttpClient.SimpleHttpResponse(202)
@@ -59,7 +60,7 @@ class EditorHttpClientTest {
     }
 
     @Test
-    fun `sendCommand returns true for any successful response`() {
+    fun `sendCommand returns true for any successful response`(): Unit = runBlocking {
         val client = EditorHttpClientTestFactory.create()
         mockkObject(SimpleHttpClient)
         every { SimpleHttpClient.postBytes(any(), any(), any(), any()) } returns SimpleHttpClient.SimpleHttpResponse(204)
@@ -68,7 +69,7 @@ class EditorHttpClientTest {
     }
 
     @Test
-    fun `sendCommand returns false on rejection`() {
+    fun `sendCommand returns false on rejection`(): Unit = runBlocking {
         val client = EditorHttpClientTestFactory.create()
         mockkObject(SimpleHttpClient)
         every { SimpleHttpClient.postBytes(any(), any(), any(), any()) } returns SimpleHttpClient.SimpleHttpResponse(400)
