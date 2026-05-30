@@ -6,8 +6,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ex.ProjectManagerEx
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.junit5.TestApplication
-import com.intellij.testFramework.runInEdtAndGet
-import com.intellij.testFramework.runInEdtAndWait
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -54,10 +54,7 @@ class DefoldProjectOpenProcessorIntegrationTest {
         val project = mockk<Project>()
 
         withMockedProjectManager(project) { captured ->
-            val opened =
-                runInEdtAndGet {
-                    runBlocking { processor.openProjectAsync(file, null, true) }
-                }
+            val opened = runBlocking { processor.openProjectAsync(file, null, true) }
 
             assertThat(captured.paths).containsExactly(expectedPath)
             assertThat(captured.options)
@@ -65,6 +62,7 @@ class DefoldProjectOpenProcessorIntegrationTest {
                 .extracting("isNewProject")
                 .isEqualTo(true)
             assertThat(opened === project).isTrue
+            coVerify(exactly = 1) { captured.manager.openProjectAsync(expectedPath, any<OpenProjectTask>()) }
         }
     }
 
@@ -80,15 +78,14 @@ class DefoldProjectOpenProcessorIntegrationTest {
             )
 
         withMockedProjectManager(openResult = null) { captured ->
-            runInEdtAndWait {
-                runBlocking { processor.openProjectAsync(directory, null, false) }
-            }
+            runBlocking { processor.openProjectAsync(directory, null, false) }
 
             assertThat(captured.paths).containsExactly(expectedPath)
             assertThat(captured.options)
                 .singleElement()
                 .extracting("isNewProject")
                 .isEqualTo(true)
+            coVerify(exactly = 1) { captured.manager.openProjectAsync(expectedPath, any<OpenProjectTask>()) }
         }
     }
 
@@ -105,9 +102,7 @@ class DefoldProjectOpenProcessorIntegrationTest {
             )
 
         withMockedProjectManager(openResult = null) { captured ->
-            runInEdtAndWait {
-                runBlocking { processor.openProjectAsync(directory, null, false) }
-            }
+            runBlocking { processor.openProjectAsync(directory, null, false) }
 
             assertThat(captured.paths).containsExactly(expectedPath)
             assertThat(captured.options)
@@ -145,13 +140,13 @@ class DefoldProjectOpenProcessorIntegrationTest {
         val options = mutableListOf<OpenProjectTask>()
         val manager = mockk<ProjectManagerEx>()
         every { ProjectManagerEx.Companion.getInstanceEx() } returns manager
-        every { manager.openProject(any<Path>(), capture(options)) } answers {
+        coEvery { manager.openProjectAsync(any<Path>(), capture(options)) } answers {
             paths.add(firstArg<Path>())
             openResult
         }
 
         return try {
-            block(CapturedOpenProjectCall(paths, options))
+            block(CapturedOpenProjectCall(paths, options, manager))
         } finally {
             unmockkObject(ProjectManagerEx.Companion)
         }
@@ -159,6 +154,7 @@ class DefoldProjectOpenProcessorIntegrationTest {
 
     private data class CapturedOpenProjectCall(
         val paths: MutableList<Path>,
-        val options: MutableList<OpenProjectTask>
+        val options: MutableList<OpenProjectTask>,
+        val manager: ProjectManagerEx
     )
 }

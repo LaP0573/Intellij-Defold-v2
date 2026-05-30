@@ -12,6 +12,7 @@ import com.intellij.platform.ide.progress.ModalTaskOwner.guess
 import com.intellij.platform.ide.progress.TaskCancellation.Companion.nonCancellable
 import com.intellij.platform.ide.progress.runWithModalProgressBlocking
 import com.intellij.projectImport.ProjectOpenProcessor
+import java.nio.file.Path
 import kotlin.io.path.exists
 
 class DefoldProjectOpenProcessor : ProjectOpenProcessor() {
@@ -30,38 +31,47 @@ class DefoldProjectOpenProcessor : ProjectOpenProcessor() {
         virtualFile: VirtualFile,
         projectToClose: Project?,
         forceOpenInNewFrame: Boolean
-    ): Project? = openProject(virtualFile, projectToClose, forceOpenInNewFrame)
-
-    override suspend fun openProjectAsync(
-        virtualFile: VirtualFile,
-        projectToClose: Project?,
-        forceOpenInNewFrame: Boolean
-    ): Project? = openProject(virtualFile, projectToClose, forceOpenInNewFrame)
-
-    private fun openProject(
-        virtualFile: VirtualFile,
-        projectToClose: Project?,
-        forceOpenInNewFrame: Boolean
     ): Project? {
-        val projectDir = when {
-            virtualFile.isDirectory -> virtualFile
-            virtualFile.isFile && virtualFile.name.equals(GAME_PROJECT_FILE, ignoreCase = false) -> virtualFile.parent
-            else -> return null // Unsupported file type
-        }.toNioPath()
+        val projectDir = resolveProjectDir(virtualFile) ?: return null
 
         val openOptions = runWithModalProgressBlocking(
             owner = guess(),
             title = "Opening Defold project",
             cancellation = nonCancellable()
         ) {
-            val isExistingProject = projectDir.resolve(DIRECTORY_STORE_FOLDER).exists()
-
-            OpenProjectTask.build()
-                .withForceOpenInNewFrame(forceOpenInNewFrame)
-                .withProjectToClose(projectToClose)
-                .letIfNot(isExistingProject, OpenProjectTask::asNewProject)
+            buildOpenOptions(projectDir, projectToClose, forceOpenInNewFrame)
         }
 
         return ProjectManagerEx.getInstanceEx().openProject(projectDir, openOptions)
+    }
+
+    override suspend fun openProjectAsync(
+        virtualFile: VirtualFile,
+        projectToClose: Project?,
+        forceOpenInNewFrame: Boolean
+    ): Project? {
+        val projectDir = resolveProjectDir(virtualFile) ?: return null
+        val openOptions = buildOpenOptions(projectDir, projectToClose, forceOpenInNewFrame)
+
+        return ProjectManagerEx.getInstanceEx().openProjectAsync(projectDir, openOptions)
+    }
+
+    private fun resolveProjectDir(virtualFile: VirtualFile): Path? = when {
+        virtualFile.isDirectory -> virtualFile
+        virtualFile.isFile && virtualFile.name.equals(GAME_PROJECT_FILE, ignoreCase = false) -> virtualFile.parent
+        else -> null
+    }?.toNioPath()
+
+    private fun buildOpenOptions(
+        projectDir: Path,
+        projectToClose: Project?,
+        forceOpenInNewFrame: Boolean
+    ): OpenProjectTask {
+        val isExistingProject = projectDir.resolve(DIRECTORY_STORE_FOLDER).exists()
+
+        return OpenProjectTask.build()
+            .withForceOpenInNewFrame(forceOpenInNewFrame)
+            .withProjectToClose(projectToClose)
+            .letIfNot(isExistingProject, OpenProjectTask::asNewProject)
     }
 }
