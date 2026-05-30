@@ -10,6 +10,7 @@ import com.intellij.openapi.application.Application
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.MessageDialogBuilder
 import com.intellij.openapi.ui.Messages
 import io.mockk.*
 import org.assertj.core.api.Assertions.assertThat
@@ -28,6 +29,11 @@ class DefoldPathResolverTest {
     private val notificationGroup = mockk<NotificationGroup>(relaxed = true)
     private val notification = mockk<Notification>(relaxed = true)
     private val showSettingsUtil = mockk<ShowSettingsUtil>(relaxed = true)
+    private val yesNoBuilder = mockk<MessageDialogBuilder.YesNo>(relaxed = true)
+    private var capturedDialogTitle: String? = null
+    private var capturedDialogMessage: String? = null
+    private var capturedDialogYesText: String? = null
+    private var capturedDialogNoText: String? = null
 
     @BeforeEach
     fun setUp() {
@@ -57,21 +63,44 @@ class DefoldPathResolverTest {
         // Mock Platform
         mockkObject(Platform.Companion)
 
-        // Mock Messages dialog
+        // Mock Messages for getCancelButton / getWarningIcon (no-op stubs are fine — they
+        // are static accessors used to build the dialog, not blocking dialog calls).
         mockkStatic(Messages::class)
+        every { Messages.getCancelButton() } returns "Cancel"
+        every { Messages.getWarningIcon() } returns mockk(relaxed = true)
+
+        // Mock MessageDialogBuilder.yesNo(...).icon(...).yesText(...).noText(...).ask(project)
+        // chain. Each builder method captures its argument so verifyDialogShown can assert on
+        // the prompt text / button labels that reached the dialog. Companion-object methods
+        // are mocked via mockkObject(...Companion) — mockkStatic does not see @JvmStatic
+        // companion methods reliably.
+        mockkObject(MessageDialogBuilder.Companion)
+        every { MessageDialogBuilder.yesNo(any(), any()) } answers {
+            capturedDialogTitle = firstArg()
+            capturedDialogMessage = secondArg()
+            yesNoBuilder
+        }
+        every { yesNoBuilder.icon(any()) } returns yesNoBuilder
+        every { yesNoBuilder.yesText(any()) } answers {
+            capturedDialogYesText = firstArg()
+            yesNoBuilder
+        }
+        every { yesNoBuilder.noText(any()) } answers {
+            capturedDialogNoText = firstArg()
+            yesNoBuilder
+        }
 
         // Mock ShowSettingsUtil
         mockkStatic(ShowSettingsUtil::class)
         every { ShowSettingsUtil.getInstance() } returns showSettingsUtil
-
-        // Default: invokeAndWait executes immediately
-        every { application.invokeAndWait(any<Runnable>()) } answers {
-            firstArg<Runnable>().run()
-        }
     }
 
     @AfterEach
     fun tearDown() {
+        capturedDialogTitle = null
+        capturedDialogMessage = null
+        capturedDialogYesText = null
+        capturedDialogNoText = null
         clearAllMocks()
         unmockkAll()
     }
@@ -107,16 +136,7 @@ class DefoldPathResolverTest {
             }
             every { settings.installPath() } returns "/some/path"
             every { Platform.current() } returns Platform.MACOS
-            every {
-                Messages.showOkCancelDialog(
-                    any<Project>(),
-                    any<String>(),
-                    any<String>(),
-                    any<String>(),
-                    any<String>(),
-                    any()
-                )
-            } returns Messages.YES
+            every { yesNoBuilder.ask(any<Project>()) } returns true
             every {
                 showSettingsUtil.showSettingsDialog(
                     any<Project>(),
@@ -140,21 +160,16 @@ class DefoldPathResolverTest {
 
             DefoldPathResolver.ensureEditorConfig(project)
 
-            verify(exactly = 1) {
-                Messages.showOkCancelDialog(
-                    eq(project),
-                    eq(
-                        "The Defold installation path could not be located.\n" +
-                            "Current location: /custom/path\n" +
-                            "\n" +
-                            "Would you like to update the path now?"
-                    ),
-                    eq("Defold"),
-                    eq("Open Settings"),
-                    eq("Cancel"),
-                    any()
-                )
-            }
+            verify(exactly = 1) { yesNoBuilder.ask(project) }
+            assertThat(capturedDialogTitle).isEqualTo("Defold")
+            assertThat(capturedDialogYesText).isEqualTo("Open Settings")
+            assertThat(capturedDialogNoText).isEqualTo("Cancel")
+            assertThat(capturedDialogMessage).isEqualTo(
+                "The Defold installation path could not be located.\n" +
+                    "Current location: /custom/path\n" +
+                    "\n" +
+                    "Would you like to update the path now?"
+            )
         }
 
         @Test
@@ -268,16 +283,7 @@ class DefoldPathResolverTest {
         every { DefoldEditorConfig.loadEditorConfig() } returns null
         every { settings.installPath() } returns installPath
         every { Platform.current() } returns platform
-        every {
-            Messages.showOkCancelDialog(
-                any<Project>(),
-                any<String>(),
-                any<String>(),
-                any<String>(),
-                any<String>(),
-                any()
-            )
-        } returns if (userClicksOk) Messages.YES else Messages.CANCEL
+        every { yesNoBuilder.ask(any<Project>()) } returns userClicksOk
         every {
             showSettingsUtil.showSettingsDialog(
                 any<Project>(),
@@ -287,16 +293,10 @@ class DefoldPathResolverTest {
     }
 
     private fun verifyDialogShown(messageMatcher: (String) -> Boolean) {
-        verify(exactly = 1) {
-            Messages.showOkCancelDialog(
-                any<Project>(),
-                match(messageMatcher),
-                any<String>(),
-                any<String>(),
-                any<String>(),
-                any()
-            )
-        }
+        verify(exactly = 1) { yesNoBuilder.ask(any<Project>()) }
+        val message = capturedDialogMessage
+        assertThat(message).isNotNull()
+        assertThat(messageMatcher(message!!)).isTrue()
     }
 
     private fun verifySettingsNotOpened() {

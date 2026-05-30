@@ -7,15 +7,18 @@ import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationType.ERROR
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.MessageDialogBuilder
 import com.intellij.openapi.ui.Messages
 import com.intellij.util.concurrency.annotations.RequiresEdt
 
 object DefoldPathResolver {
     /**
-     * Must be invoked from the EDT — both [Messages.showOkCancelDialog] and
+     * Must be invoked from the EDT — both [MessageDialogBuilder.YesNo.ask] and
      * [ShowSettingsUtil.showSettingsDialog] are `@RequiresEdt`. Non-EDT callers (project
      * startup, run/debug program runners) bridge via `withContext(Dispatchers.EDT) { ... }` so
-     * the EDT is never blocked by a non-suspend bridge such as `invokeAndWait`.
+     * the EDT is never blocked by a non-suspend bridge such as `invokeAndWait`. The dialog
+     * uses [MessageDialogBuilder] (the suspend-friendly idiom in 2025.2) rather than the
+     * legacy `Messages.show*Dialog` calls.
      */
     @RequiresEdt
     fun ensureEditorConfig(project: Project): DefoldEditorConfig? {
@@ -32,14 +35,12 @@ object DefoldPathResolver {
             append("\n\nWould you like to update the path now?")
         }
 
-        val openSettings = Messages.showOkCancelDialog(
-            project,
-            message,
-            "Defold",
-            "Open Settings",
-            Messages.getCancelButton(),
-            Messages.getWarningIcon()
-        ) == Messages.YES
+        val openSettings = MessageDialogBuilder
+            .yesNo("Defold", message)
+            .icon(Messages.getWarningIcon())
+            .yesText("Open Settings")
+            .noText(Messages.getCancelButton())
+            .ask(project)
 
         if (!openSettings) return null
 
