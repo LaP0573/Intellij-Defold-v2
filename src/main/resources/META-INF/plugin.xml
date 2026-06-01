@@ -54,6 +54,9 @@
         <programRunner implementation="com.aridclown.intellij.defold.debugger.ProjectRunProgramRunner"/>
         <completion.contributor language="Lua"
                                 implementationClass="com.aridclown.intellij.defold.debugger.MobDebugCompletionContributor"/>
+        <completion.contributor language="Lua"
+                                order="first"
+                                implementationClass="com.aridclown.intellij.defold.completion.DefoldUrlCompletionContributor"/>
         <runConfigurationProducer
                 implementation="com.aridclown.intellij.defold.debugger.MobDebugConfigurationProducer"/>
     </extensions>
