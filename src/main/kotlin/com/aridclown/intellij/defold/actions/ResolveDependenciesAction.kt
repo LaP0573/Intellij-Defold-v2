@@ -1,6 +1,7 @@
 package com.aridclown.intellij.defold.actions
 
 import com.aridclown.intellij.defold.DefoldCoroutineService.Companion.launch
+import com.aridclown.intellij.defold.DependencyAnnotationsManager
 import com.aridclown.intellij.defold.DependencyResolver
 import com.intellij.openapi.actionSystem.AnActionEvent
 
@@ -9,6 +10,7 @@ class ResolveDependenciesAction : DefoldProjectAction() {
         withDefoldConfig(project) { config ->
             project.launch {
                 DependencyResolver.resolve(project, config)
+                DependencyAnnotationsManager.getInstance(project).sync()
             }
         }
     }
