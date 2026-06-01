@@ -52,7 +52,7 @@ class EngineRunnerTest {
     }
 
     @Test
-    fun `uses project workspace and applies environment when starting engine`() {
+    fun `uses project workspace and exposes default service port for plain runs`() {
         val request = runRequest(enableDebugScript = false)
         val command = captureCommand(request)
 
@@ -60,9 +60,18 @@ class EngineRunnerTest {
         assertThat(command.workDirectory!!.toPath()).isEqualTo(Path.of(WORKSPACE))
         assertThat(command.environment)
             .containsEntry("FOO", "BAR")
-            .doesNotContainKeys("DM_SERVICE_PORT", "MOBDEBUG_PORT")
+            .containsEntry("DM_SERVICE_PORT", EngineRunner.DEFAULT_SERVICE_PORT.toString())
+            .doesNotContainKey("MOBDEBUG_PORT")
         assertThat(command.parametersList.parametersCount).isZero()
         verify(exactly = 1) { engineDiscovery.attachToProcess(handler, null) }
+    }
+
+    @Test
+    fun `honors explicit server port for plain runs`() {
+        val request = runRequest(enableDebugScript = false, serverPort = 9123)
+        val command = captureCommand(request)
+
+        assertThat(command.environment).containsEntry("DM_SERVICE_PORT", "9123")
     }
 
     @Test

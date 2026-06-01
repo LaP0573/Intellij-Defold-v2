@@ -3,6 +3,7 @@ package com.aridclown.intellij.defold.hotreload
 import com.aridclown.intellij.defold.*
 import com.aridclown.intellij.defold.DefoldConstants.ARTIFACT_MAP_FILE
 import com.aridclown.intellij.defold.DefoldConstants.BUILD_CACHE_FOLDER
+import com.aridclown.intellij.defold.DefoldCoroutineService.Companion.launch
 import com.aridclown.intellij.defold.DefoldProjectService.Companion.ensureConsole
 import com.aridclown.intellij.defold.DefoldProjectService.Companion.findActiveConsole
 import com.aridclown.intellij.defold.EngineDiscoveryService.Companion.getEngineDiscoveryService
@@ -17,6 +18,8 @@ import com.intellij.openapi.components.Service.Level.PROJECT
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.io.FileUtil
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.annotations.TestOnly
 import java.io.IOException
@@ -26,6 +29,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.security.MessageDigest
 import java.time.Duration.ofSeconds
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
 import kotlin.io.path.notExists
@@ -48,10 +52,16 @@ class HotReloadService(
     companion object {
         const val RELOAD_ENDPOINT = "/post/@resource/reload"
         const val RELOAD_CONTENT_TYPE = "application/x-protobuf"
+        private const val EDITOR_HOT_RELOAD_COMMAND = "hot-reload"
         private val HOT_RELOAD_EXTENSIONS = setOf("script", "lua", "gui_script", "go")
         private val KNOWN_BUILD_CONFIG_SEGMENTS = setOf("default", "debug", "release", "profile")
         private const val BUILD_TIMEOUT_SECONDS = 30L
         private const val RELOAD_REQUEST_TIMEOUT_SECONDS = 5L
+
+        // Enablement-only SSDP cache freshness window. The action-update path reads the last
+        // cached SSDP result and triggers a background refresh at most once per window, so a
+        // ~700ms multicast never runs inline on update().
+        private const val SSDP_CACHE_TTL_MILLIS = 5_000L
 
         fun Project.hotReloadProjectService(): HotReloadService = service<HotReloadService>()
 
@@ -95,6 +105,16 @@ class HotReloadService(
     private val artifactCacheByCompiledPath = mutableMapOf<String, CachedArtifact>()
     private var runtime: HotReloadDependencies = createDefaultDependencies()
 
+    // Last SSDP discovery result, used only to keep the Hot Reload action enabled for engines
+    // the plugin did not launch (see [hasReloadTarget]). Written from a background coroutine and
+    // read from the action-update path, hence @Volatile + an in-flight guard.
+    @Volatile
+    private var ssdpCachedEndpoints: List<EngineEndpoint> = emptyList()
+
+    @Volatile
+    private var lastSsdpRefreshMillis: Long = 0L
+    private val ssdpRefreshInFlight = AtomicBoolean(false)
+
     init {
         loadArtifactCache()
     }
@@ -102,7 +122,13 @@ class HotReloadService(
     suspend fun performHotReload() {
         val console = runtime.obtainConsole()
         val endpoints = runtime.ensureReachableEngines(console)
-        if (endpoints.isEmpty()) return
+        if (endpoints.isEmpty()) {
+            // Direct + SSDP-discovered engines were unreachable — fall back to delegating
+            // the reload to a running Defold editor over its HTTP command API. The editor
+            // owns its own engine and handles the rebuild+reload itself.
+            runtime.delegateToEditor(console)
+            return
+        }
 
         return try {
             // Ensure artifacts are cached
@@ -137,7 +163,54 @@ class HotReloadService(
         }
     }
 
-    fun hasReachableEngine(): Boolean = resolveEngineEndpoints().isNotEmpty()
+    /**
+     * Returns `true` when at least one hot-reload path is likely to work, so the action stays
+     * enabled across every run scenario covered by the discovery layers:
+     *  - a direct engine endpoint exists (the plugin launched the engine itself), or
+     *  - a Defold editor instance is running locally (`.internal/editor.port` file), or
+     *  - SSDP/UPnP discovery has previously found a running engine on the local network.
+     *
+     * SSDP is a ~700ms blocking multicast and this runs on the frequently-invoked action-update
+     * path, so it is never probed inline here. Instead we read the last cached SSDP result and
+     * kick a throttled background refresh ([scheduleSsdpRefreshIfStale]); the action lights up for
+     * an SSDP-only target on a subsequent update once the cache warms.
+     */
+    fun hasReloadTarget(): Boolean {
+        if (resolveEngineEndpoints().isNotEmpty()) return true
+        if (isEditorRunningLocally()) return true
+        scheduleSsdpRefreshIfStale()
+        return ssdpCachedEndpoints.isNotEmpty()
+    }
+
+    private fun isEditorRunningLocally(): Boolean {
+        val basePath = project.basePath ?: return false
+        return Files.exists(Paths.get(basePath, ".internal", "editor.port"))
+    }
+
+    /**
+     * Refreshes [ssdpCachedEndpoints] by running SSDP discovery synchronously. Safe to call
+     * directly (e.g. from tests); production callers go through [scheduleSsdpRefreshIfStale] so
+     * the blocking multicast happens off the action-update path.
+     */
+    internal fun refreshSsdpCache(): List<EngineEndpoint> {
+        val endpoints = runtime.discoverSsdpEngines()
+        ssdpCachedEndpoints = endpoints
+        lastSsdpRefreshMillis = System.currentTimeMillis()
+        return endpoints
+    }
+
+    private fun scheduleSsdpRefreshIfStale() {
+        if (System.currentTimeMillis() - lastSsdpRefreshMillis < SSDP_CACHE_TTL_MILLIS) return
+        // Coalesce the bursty update() calls onto a single in-flight refresh.
+        if (!ssdpRefreshInFlight.compareAndSet(false, true)) return
+        project.launch {
+            try {
+                withContext(Dispatchers.IO) { refreshSsdpCache() }
+            } finally {
+                ssdpRefreshInFlight.set(false)
+            }
+        }
+    }
 
     internal fun refreshBuildArtifacts() {
         val basePath = project.basePath?.let(Path::of)
@@ -372,7 +445,14 @@ class HotReloadService(
         override fun obtainConsole(): ConsoleView = project.findActiveConsole() ?: project.ensureConsole("Defold Hot Reload")
 
         override fun ensureReachableEngines(console: ConsoleView): List<EngineEndpoint> {
-            val reachable = resolveEngineEndpoints().filter { isEngineReachable(it, console) }
+            // Two discovery sources, ping-filtered and de-duplicated:
+            //  - direct: engines launched by the plugin (stdout scrape in EngineDiscoveryService)
+            //  - remote: SSDP/UPnP broadcast on the local network, catches editor-launched
+            //    or otherwise externally-started Defold games
+            val direct = resolveEngineEndpoints()
+            val remote = discoverSsdpEngines()
+            val combined = (direct + remote).distinctBy { it.address to it.port }
+            val reachable = combined.filter { isEngineReachable(it, console) }
             if (reachable.isEmpty()) {
                 console.printError("Defold engine not reachable. Make sure the game is running from IntelliJ")
             }
@@ -412,6 +492,29 @@ class HotReloadService(
             return false
         }
 
+        override suspend fun delegateToEditor(console: ConsoleView): Boolean {
+            val projectPath = project.basePath ?: return false
+            val client = EditorHttpClient.connect(projectPath) ?: run {
+                console.printError("Defold editor is not running; cannot delegate hot reload")
+                return false
+            }
+            if (!client.supports(EDITOR_HOT_RELOAD_COMMAND)) {
+                console.printError(
+                    "The running Defold editor does not expose '/command/$EDITOR_HOT_RELOAD_COMMAND'"
+                )
+                return false
+            }
+            val accepted = client.sendCommand(EDITOR_HOT_RELOAD_COMMAND)
+            if (accepted) {
+                console.printInfo("Delegated hot reload to the running Defold editor.")
+            } else {
+                console.printError("The Defold editor rejected the hot-reload command")
+            }
+            return accepted
+        }
+
+        override fun discoverSsdpEngines(): List<EngineEndpoint> = SsdpEngineDiscovery.discover()
+
         override fun sendResourceReload(
             endpoint: EngineEndpoint,
             payload: ByteArray
@@ -430,6 +533,20 @@ internal interface HotReloadDependencies {
         endpoint: EngineEndpoint,
         payload: ByteArray
     )
+
+    /**
+     * Runs SSDP/UPnP discovery for already-running Defold engines on the local network.
+     * Best-effort: returns an empty list when nothing is found or discovery fails.
+     */
+    fun discoverSsdpEngines(): List<EngineEndpoint>
+
+    /**
+     * Fallback path: ask a running Defold editor to perform the hot reload via its
+     * HTTP command API (`POST /command/hot-reload`). Returns `true` when the editor
+     * accepted the command. Used when no engine endpoint is directly reachable —
+     * the typical "user clicked Run from the editor itself" case.
+     */
+    suspend fun delegateToEditor(console: ConsoleView): Boolean
 }
 
 data class BuildArtifact(

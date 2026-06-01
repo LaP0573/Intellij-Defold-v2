@@ -17,6 +17,12 @@ import kotlin.io.path.pathString
 class EngineRunner(
     private val processExecutor: ProcessExecutor
 ) {
+    companion object {
+        // Defold engine default service port. Surfaces /reload and other HTTP endpoints
+        // the hot-reload service talks to.
+        const val DEFAULT_SERVICE_PORT: Int = 8001
+    }
+
     fun launchEngine(
         runRequest: RunRequest,
         enginePath: Path
@@ -27,12 +33,14 @@ class EngineRunner(
                 GeneralCommandLine(enginePath.toAbsolutePath().pathString)
                     .withWorkingDirectory(Path(workspace))
                     .applyEnvironment(envData)
+                    // Always expose the engine service so hot reload works for plain Run too,
+                    // not just the debug branch (see HotReload deep-dive in docs/).
+                    .withEnvironment("DM_SERVICE_PORT", (serverPort ?: DEFAULT_SERVICE_PORT).toString())
 
             if (enableDebugScript) {
                 val port = debugPort ?: DEFAULT_MOBDEBUG_PORT
                 command
                     .withParameters("--config=bootstrap.debug_init_script=$INI_DEBUG_INIT_SCRIPT_VALUE")
-                    .withEnvironment("DM_SERVICE_PORT", serverPort?.toString() ?: "8001")
                     .withEnvironment("MOBDEBUG_PORT", port.toString())
             }
 

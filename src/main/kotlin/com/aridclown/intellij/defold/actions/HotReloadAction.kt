@@ -26,6 +26,6 @@ class HotReloadAction : AnAction() {
 
     override fun update(event: AnActionEvent) = with(event) {
         presentation.isEnabled = project.isDefoldProject &&
-            project?.hotReloadProjectService()?.hasReachableEngine() == true
+            project?.hotReloadProjectService()?.hasReloadTarget() == true
     }
 }

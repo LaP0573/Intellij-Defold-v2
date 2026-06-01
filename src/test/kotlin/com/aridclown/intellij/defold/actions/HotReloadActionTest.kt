@@ -76,8 +76,8 @@ class HotReloadActionTest {
 
     @ParameterizedTest
     @ValueSource(booleans = [true, false])
-    fun `action is enabled only when engine is reachable`(enabled: Boolean) {
-        every { hotReloadService.hasReachableEngine() } returns enabled
+    fun `action is enabled when any discovery layer reports a reload target`(enabled: Boolean) {
+        every { hotReloadService.hasReloadTarget() } returns enabled
 
         hotReloadAction.update(event)
 
