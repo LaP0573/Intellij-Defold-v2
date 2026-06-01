@@ -3,6 +3,7 @@ package com.aridclown.intellij.defold.actions
 import com.aridclown.intellij.defold.AndroidBundleFormat
 import com.aridclown.intellij.defold.BuildRequest
 import com.aridclown.intellij.defold.BundleCommandBuilder
+import com.aridclown.intellij.defold.BundleCredentials
 import com.aridclown.intellij.defold.BundleOptions
 import com.aridclown.intellij.defold.BundleTarget
 import com.aridclown.intellij.defold.BundleVariant
@@ -11,6 +12,8 @@ import com.aridclown.intellij.defold.DefoldEditorConfig
 import com.aridclown.intellij.defold.ProjectBuilder
 import com.aridclown.intellij.defold.TextureCompressionMode
 import com.aridclown.intellij.defold.process.ProcessExecutor
+import com.aridclown.intellij.defold.settings.DefoldSettings
+import com.aridclown.intellij.defold.settings.toBundleCredentials
 import com.aridclown.intellij.defold.util.NotificationService.notifyInfo
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.project.Project
@@ -45,7 +48,7 @@ class BundleAction : DefoldProjectAction() {
         target: BundleTarget,
         options: BundleOptions
     ) {
-        val commands = BundleCommandBuilder.build(target, options)
+        val commands = BundleCommandBuilder.build(target, options, DefoldSettings.getInstance().toBundleCredentials())
         project.notifyInfo(
             title = "Defold",
             content = "Bundling ${target.displayName} (${options.variant.flag})…"

@@ -10,7 +10,17 @@ import com.intellij.openapi.components.Storage
 @State(name = "DefoldSettings", storages = [Storage("defold.xml")])
 class DefoldSettings : PersistentStateComponent<DefoldSettings.State> {
     data class State(
-        var installPath: String? = null
+        var installPath: String? = null,
+        var iosProvisioningDebug: String? = null,
+        var iosProvisioningRelease: String? = null,
+        var iosIdentityDebug: String? = null,
+        var iosIdentityRelease: String? = null,
+        var androidKeystore: String? = null,
+        var androidKeystorePass: String? = null,
+        var androidKeystoreAlias: String? = null,
+        var buildServer: String? = null,
+        var privateDepEmail: String? = null,
+        var privateDepAuth: String? = null
     )
 
     private var state = State()
@@ -21,7 +31,7 @@ class DefoldSettings : PersistentStateComponent<DefoldSettings.State> {
         this.state = state
     }
 
-    fun installPath(): String? = state.installPath?.takeIf { it.isNotBlank() }
+    fun installPath(): String? = state.installPath?.takeNonBlank()
 
     fun setInstallPath(path: String) {
         state.installPath = path.trim()
@@ -29,6 +39,57 @@ class DefoldSettings : PersistentStateComponent<DefoldSettings.State> {
 
     fun clearInstallPath() {
         state.installPath = null
+    }
+
+    fun iosProvisioningDebug(): String? = state.iosProvisioningDebug?.takeNonBlank()
+    fun iosProvisioningRelease(): String? = state.iosProvisioningRelease?.takeNonBlank()
+    fun iosIdentityDebug(): String? = state.iosIdentityDebug?.takeNonBlank()
+    fun iosIdentityRelease(): String? = state.iosIdentityRelease?.takeNonBlank()
+    fun androidKeystore(): String? = state.androidKeystore?.takeNonBlank()
+    fun androidKeystorePass(): String? = state.androidKeystorePass?.takeNonBlank()
+    fun androidKeystoreAlias(): String? = state.androidKeystoreAlias?.takeNonBlank()
+    fun buildServer(): String? = state.buildServer?.takeNonBlank()
+    fun privateDepEmail(): String? = state.privateDepEmail?.takeNonBlank()
+    fun privateDepAuth(): String? = state.privateDepAuth?.takeNonBlank()
+
+    fun setIosProvisioningDebug(value: String?) {
+        state.iosProvisioningDebug = value?.trim()
+    }
+
+    fun setIosProvisioningRelease(value: String?) {
+        state.iosProvisioningRelease = value?.trim()
+    }
+
+    fun setIosIdentityDebug(value: String?) {
+        state.iosIdentityDebug = value?.trim()
+    }
+
+    fun setIosIdentityRelease(value: String?) {
+        state.iosIdentityRelease = value?.trim()
+    }
+
+    fun setAndroidKeystore(value: String?) {
+        state.androidKeystore = value?.trim()
+    }
+
+    fun setAndroidKeystorePass(value: String?) {
+        state.androidKeystorePass = value?.trim()
+    }
+
+    fun setAndroidKeystoreAlias(value: String?) {
+        state.androidKeystoreAlias = value?.trim()
+    }
+
+    fun setBuildServer(value: String?) {
+        state.buildServer = value?.trim()
+    }
+
+    fun setPrivateDepEmail(value: String?) {
+        state.privateDepEmail = value?.trim()
+    }
+
+    fun setPrivateDepAuth(value: String?) {
+        state.privateDepAuth = value?.trim()
     }
 
     companion object {
@@ -40,3 +101,5 @@ class DefoldSettings : PersistentStateComponent<DefoldSettings.State> {
         }
     }
 }
+
+private fun String.takeNonBlank(): String? = takeIf { it.isNotBlank() }

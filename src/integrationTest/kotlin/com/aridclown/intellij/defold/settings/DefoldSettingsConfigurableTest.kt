@@ -62,7 +62,7 @@ class DefoldSettingsConfigurableTest : BasePlatformTestCase() {
     private fun createConfigurable(): Pair<DefoldSettingsConfigurable, TextFieldWithBrowseButton> {
         val configurable = DefoldSettingsConfigurable()
         val component = configurable.createComponent()
-        val field = collectComponents<TextFieldWithBrowseButton>(component).single()
+        val field = collectComponents<TextFieldWithBrowseButton>(component).first()
 
         return configurable to field
     }
