@@ -44,6 +44,40 @@ class LuarcConfigurationManager {
         }
     }
 
+    /**
+     * Registers a per-dependency annotations cache directory as an additional LuaLS library root.
+     * The cache path must end with the [DEPENDENCY_CACHE_DIRNAME] sentinel so stale entries from
+     * earlier projects/sandboxes can be replaced without disturbing user-managed entries.
+     *
+     * No-ops if the project has no base path. Silent on failure (logs only) — this is best-effort
+     * autoconfiguration, not user-initiated.
+     */
+    fun ensureDependencyLibrary(project: Project, dependencyCacheDir: Path) {
+        val projectRoot = project.basePath?.let(Path::of) ?: return
+        val luarcFile = projectRoot.resolve(".luarc.json")
+        val dependencyPath = dependencyCacheDir.toAbsolutePath().normalize().pathString
+
+        runCatching {
+            val existing = if (Files.exists(luarcFile)) {
+                runCatching { JsonParser.parseString(Files.readString(luarcFile)).asJsonObject }
+                    .getOrElse { JsonObject() }
+            } else {
+                JsonObject()
+            }
+
+            val merged = mergeDependencyLibrary(existing, dependencyPath)
+            val output = toJson(merged)
+
+            if (Files.exists(luarcFile) && Files.readString(luarcFile) == output) return
+
+            luarcFile.parent?.let(Files::createDirectories)
+            Files.writeString(luarcFile, output)
+            LocalFileSystem.getInstance().refreshNioFiles(listOf(luarcFile))
+        }.onFailure {
+            logger.warn("Failed to register dependency annotations library: ${it.message}", it)
+        }
+    }
+
     fun generateContent(apiPath: String): LuarcConfig {
         val normalizedPath = Path.of(apiPath).normalize().pathString
         val extensions = DefoldScriptType.entries.map { ".${it.extension}" }
@@ -109,6 +143,18 @@ class LuarcConfigurationManager {
         runtime.add("extensions", gson.toJsonTree(extensionSet + desired.runtime.extensions))
     }
 
+    private fun mergeDependencyLibrary(existing: JsonObject, dependencyPath: String) = existing.deepCopy().apply {
+        val workspace = getAsJsonObject("workspace")
+            ?: JsonObject().also { add("workspace", it) }
+
+        val librarySet = workspace.getAsJsonArray("library")
+            .mapNotEmpty()
+            .filterNot {
+                it.endsWith("/$DEPENDENCY_CACHE_DIRNAME") || it.endsWith("\\$DEPENDENCY_CACHE_DIRNAME")
+            }
+        workspace.add("library", gson.toJsonTree(librarySet + dependencyPath))
+    }
+
     private fun JsonArray?.mapNotEmpty() = this?.mapNotNull { it.takeIf { !it.isJsonNull }?.asString }
         ?.toSet()
         ?: emptySet()
@@ -146,6 +192,8 @@ class LuarcConfigurationManager {
     )
 
     companion object {
+        const val DEPENDENCY_CACHE_DIRNAME = "dependency_api"
+
         private const val LUA_LS_SCHEMA =
             "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json"
         private const val LUA_RUNTIME_VERSION = "Lua 5.1"

@@ -1,6 +1,7 @@
 package com.aridclown.intellij.defold
 
 import com.aridclown.intellij.defold.DefoldAnnotationsManager.Companion.getInstance
+import com.aridclown.intellij.defold.DefoldCoroutineService.Companion.launch
 import com.aridclown.intellij.defold.DefoldProjectService.Companion.isDefoldProject
 import com.aridclown.intellij.defold.actions.DefoldIdeActionsDisabler
 import com.aridclown.intellij.defold.resources.DefoldUrlIndexService.Companion.defoldUrlIndexService
@@ -24,6 +25,8 @@ import com.intellij.openapi.vfs.VirtualFileManager.VFS_CHANGES
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileCreateEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
@@ -55,6 +58,10 @@ class DefoldProjectActivity : ProjectActivity {
 
             // Ensure project dependencies are resolved
             resolveProjectDependencies(project)
+
+            // Extract per-dependency Lua annotations and keep them in sync with .internal/lib
+            syncDependencyAnnotations(project)
+            watchDependencyArchives(project)
         } else {
             logger.warn("No Defold project detected.")
         }
@@ -88,6 +95,39 @@ class DefoldProjectActivity : ProjectActivity {
         // simply skip dependency resolution until the user configures the path.
         val config = DefoldPathResolver.ensureEditorConfigOrNotify(project) ?: return
         DependencyResolver.resolve(project, config)
+    }
+
+    private fun syncDependencyAnnotations(project: Project) {
+        runCatching { DependencyAnnotationsManager.getInstance(project).sync() }
+            .onFailure { logger.warn("Failed to sync Defold dependency annotations: ${it.message}", it) }
+    }
+
+    private fun watchDependencyArchives(project: Project) {
+        val basePath = project.basePath ?: return
+        val libDirPath = Path.of(basePath, ".internal", "lib").toAbsolutePath().normalize().toString()
+        val connection = project.messageBus.connect()
+        var pendingSync: Job? = null
+
+        connection.subscribe(
+            topic = VFS_CHANGES,
+            handler = object : BulkFileListener {
+                override fun after(events: List<VFileEvent>) {
+                    val touchesLibZip = events.any { event ->
+                        val path = event.path
+                        path.contains("/.internal/lib/") &&
+                            path.endsWith(".zip", ignoreCase = true) &&
+                            path.startsWith(libDirPath)
+                    }
+                    if (!touchesLibZip) return
+
+                    pendingSync?.cancel()
+                    pendingSync = project.launch {
+                        delay(DEPENDENCY_RESYNC_DEBOUNCE_MS)
+                        syncDependencyAnnotations(project)
+                    }
+                }
+            }
+        )
     }
 
     private fun ensureQuickDocOnCompletion() {
@@ -184,6 +224,8 @@ class DefoldProjectActivity : ProjectActivity {
             ?.configureDefoldRoots(baseDir) ?: return@edtWriteAction
     }
 }
+
+private const val DEPENDENCY_RESYNC_DEBOUNCE_MS = 500L
 
 private val DEFOLD_DEFAULT_EXCLUDES = listOf(".git", ".idea", "build", ".internal", "debugger")
 
