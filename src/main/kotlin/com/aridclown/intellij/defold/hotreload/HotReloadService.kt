@@ -46,12 +46,49 @@ class HotReloadService(
     private val project: Project
 ) {
     companion object {
-        private const val RELOAD_ENDPOINT = "/post/@resource/reload"
+        const val RELOAD_ENDPOINT = "/post/@resource/reload"
+        const val RELOAD_CONTENT_TYPE = "application/x-protobuf"
         private val HOT_RELOAD_EXTENSIONS = setOf("script", "lua", "gui_script", "go")
         private val KNOWN_BUILD_CONFIG_SEGMENTS = setOf("default", "debug", "release", "profile")
         private const val BUILD_TIMEOUT_SECONDS = 30L
+        private const val RELOAD_REQUEST_TIMEOUT_SECONDS = 5L
 
         fun Project.hotReloadProjectService(): HotReloadService = service<HotReloadService>()
+
+        /**
+         * Sends a `Resource.Reload` protobuf payload to a Defold engine's HTTP service.
+         *
+         * The engine parses `/post/<socket>/<message>` (engine_service.cpp), the resource
+         * factory registers `RESOURCE_SOCKET_NAME = "@resource"` (resource.cpp), and DDF
+         * descriptors are keyed by the lowercased message name (`ddfc.py`), so the route
+         * for `dmResourceDDF.Reload` is `/post/@resource/reload`.
+         *
+         * A non-2xx response is surfaced as [IOException], as is any connection failure.
+         */
+        fun sendResourceReloadRequest(
+            endpoint: EngineEndpoint,
+            payload: ByteArray
+        ) {
+            val url = "http://${endpoint.address}:${endpoint.port}$RELOAD_ENDPOINT"
+
+            try {
+                val response =
+                    SimpleHttpClient.postBytes(
+                        url = url,
+                        body = payload,
+                        contentType = RELOAD_CONTENT_TYPE,
+                        timeout = ofSeconds(RELOAD_REQUEST_TIMEOUT_SECONDS)
+                    )
+                if (response.code !in 200..299) {
+                    throw IOException("Engine reload request failed with status ${response.code}")
+                }
+            } catch (e: IOException) {
+                throw IOException(
+                    "Could not connect to Defold engine. Make sure the game is running from IntelliJ",
+                    e
+                )
+            }
+        }
     }
 
     private val artifactsByNormalizedPath = mutableMapOf<String, BuildArtifact>()
@@ -378,27 +415,7 @@ class HotReloadService(
         override fun sendResourceReload(
             endpoint: EngineEndpoint,
             payload: ByteArray
-        ) {
-            val url = "http://${endpoint.address}:${endpoint.port}$RELOAD_ENDPOINT"
-
-            try {
-                val response =
-                    SimpleHttpClient.postBytes(
-                        url = url,
-                        body = payload,
-                        contentType = "application/x-protobuf",
-                        timeout = ofSeconds(5)
-                    )
-                if (response.code !in 200..299) {
-                    throw IOException("Engine reload request failed with status ${response.code}")
-                }
-            } catch (e: IOException) {
-                throw IOException(
-                    "Could not connect to Defold engine. Make sure the game is running from IntelliJ",
-                    e
-                )
-            }
-        }
+        ) = sendResourceReloadRequest(endpoint, payload)
     }
 }
 
