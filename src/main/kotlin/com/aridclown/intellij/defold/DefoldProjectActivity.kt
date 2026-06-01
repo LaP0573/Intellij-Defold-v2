@@ -3,6 +3,7 @@ package com.aridclown.intellij.defold
 import com.aridclown.intellij.defold.DefoldAnnotationsManager.Companion.getInstance
 import com.aridclown.intellij.defold.DefoldProjectService.Companion.isDefoldProject
 import com.aridclown.intellij.defold.actions.DefoldIdeActionsDisabler
+import com.aridclown.intellij.defold.resources.DefoldUrlIndexService.Companion.defoldUrlIndexService
 import com.aridclown.intellij.defold.util.trySilently
 import com.intellij.codeInsight.CodeInsightSettings
 import com.intellij.openapi.application.edtWriteAction
@@ -49,11 +50,35 @@ class DefoldProjectActivity : ProjectActivity {
             // Ensure Defold API annotations are downloaded, cached and configured with LuaLS
             getInstance(project).ensureAnnotationsAttached()
 
+            // Build the Defold URL index and subscribe to VFS changes for live refresh
+            primeDefoldUrlIndex(project)
+
             // Ensure project dependencies are resolved
             resolveProjectDependencies(project)
         } else {
             logger.warn("No Defold project detected.")
         }
+    }
+
+    private fun primeDefoldUrlIndex(project: Project) {
+        val service = project.defoldUrlIndexService()
+        service.scheduleRebuild()
+
+        val connection = project.messageBus.connect()
+        connection.subscribe(
+            topic = VFS_CHANGES,
+            handler =
+            object : BulkFileListener {
+                override fun after(events: List<VFileEvent>) {
+                    if (events.any { it.isDefoldResourceEvent() }) service.scheduleRebuild()
+                }
+            }
+        )
+    }
+
+    private fun VFileEvent.isDefoldResourceEvent(): Boolean {
+        val path = path
+        return path.endsWith(".go") || path.endsWith(".collection")
     }
 
     private suspend fun resolveProjectDependencies(project: Project) {
