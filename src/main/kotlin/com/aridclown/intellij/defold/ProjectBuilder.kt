@@ -93,15 +93,16 @@ class ProjectBuilder(
         projectPath: String,
         commands: List<String>
     ): GeneralCommandLine {
-        val parameters = listOf(
-            "-cp",
-            config.editorJar,
-            BOB_MAIN_CLASS,
-            "--variant=debug"
-        ) + commands
+        val callerProvidesVariant = commands.any { it.startsWith("--variant=") }
+        val prefix = buildList {
+            add("-cp")
+            add(config.editorJar)
+            add(BOB_MAIN_CLASS)
+            if (!callerProvidesVariant) add("--variant=debug")
+        }
 
         return GeneralCommandLine(config.javaBin)
-            .withParameters(parameters)
+            .withParameters(prefix + commands)
             .withWorkingDirectory(Path(projectPath))
     }
 }

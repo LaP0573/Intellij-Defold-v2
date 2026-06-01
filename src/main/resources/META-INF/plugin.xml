@@ -100,6 +100,11 @@
                     class="com.aridclown.intellij.defold.actions.CleanBuildProjectAction">
                 <keyboard-shortcut keymap="$default" first-keystroke="alt shift B" replace-all="true"/>
             </action>
+            <action id="BundleDefoldProject"
+                    text="Bundle…"
+                    icon="AllIcons.Actions.Install"
+                    description="Bundle the Defold project for a target platform"
+                    class="com.aridclown.intellij.defold.actions.BundleAction"/>
             <action id="ResolveDefoldDependencies"
                     text="Resolve Dependencies"
                     class="com.aridclown.intellij.defold.actions.ResolveDependenciesAction"/>
