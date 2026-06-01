@@ -37,7 +37,7 @@ class HotReloadServiceTest {
     }
 
     @Test
-    fun `performHotReload should abort when engine is unreachable`() {
+    fun `performHotReload should abort when engine is unreachable and editor unavailable`() {
         val recording = recordingConsole()
         val dependencies = mockk<HotReloadDependencies>()
         every { dependencies.obtainConsole() } returns recording.console
@@ -48,6 +48,7 @@ class HotReloadServiceTest {
             )
             emptyList()
         }
+        coEvery { dependencies.delegateToEditor(recording.console) } returns false
 
         hotReloadService.setDependenciesForTesting(dependencies)
 
