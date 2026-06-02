@@ -133,6 +133,10 @@
             <action id="ReloadDefoldAnnotations"
                     text="Reload Defold Annotations"
                     class="com.aridclown.intellij.defold.actions.ReloadAnnotationsAction"/>
+            <action id="Defold.GenerateManifest"
+                    text="Generate App Manifest..."
+                    description="Generate a Defold native-extension app manifest and wire it into game.project"
+                    class="com.aridclown.intellij.defold.templates.GenerateManifestAction"/>
             <separator/>
             <reference ref="Synchronize"/>
             <action id="OpenDefoldEditor"
