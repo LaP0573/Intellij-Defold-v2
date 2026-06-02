@@ -70,6 +70,21 @@
                     text="Defold Script File"
                     description="Create a new Defold script file">
             </action>
+            <action id="Defold.NewGameObject"
+                    class="com.aridclown.intellij.defold.templates.CreateGameObjectAction"
+                    text="Defold Game Object"
+                    description="Scaffold a Defold game object (.go + script + factory)">
+            </action>
+            <action id="Defold.NewGui"
+                    class="com.aridclown.intellij.defold.templates.CreateGuiAction"
+                    text="Defold Gui"
+                    description="Scaffold a Defold gui (.gui + gui_script)">
+            </action>
+            <action id="Defold.NewLuaModule"
+                    class="com.aridclown.intellij.defold.templates.CreateLuaModuleAction"
+                    text="Defold Lua Module"
+                    description="Scaffold a Defold lua module (.lua)">
+            </action>
             <separator/>
         </group>
 
