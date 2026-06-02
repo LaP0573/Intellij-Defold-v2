@@ -12,7 +12,8 @@ package com.aridclown.intellij.defold
 object BundleCommandBuilder {
     fun build(
         target: BundleTarget,
-        options: BundleOptions = BundleOptions()
+        options: BundleOptions = BundleOptions(),
+        credentials: BundleCredentials = BundleCredentials()
     ): List<String> = buildList {
         add("--variant=${options.variant.flag}")
         add("--archive")
@@ -41,7 +42,56 @@ object BundleCommandBuilder {
             add("--liveupdate")
             add("yes")
         }
+        addSigningFlags(target, options.variant, credentials)
+        credentials.buildServer?.let {
+            add("--build-server")
+            add(it)
+        }
+        credentials.privateDepEmail?.let {
+            add("--email")
+            add(it)
+        }
+        credentials.privateDepAuth?.let {
+            add("--auth")
+            add(it)
+        }
         add("bundle")
+    }
+
+    private fun MutableList<String>.addSigningFlags(
+        target: BundleTarget,
+        variant: BundleVariant,
+        credentials: BundleCredentials
+    ) {
+        when (target) {
+            BundleTarget.IOS -> {
+                credentials.iosProvisioningFor(variant)?.let {
+                    add("--mobileprovisioning")
+                    add(it)
+                }
+                credentials.iosIdentityFor(variant)?.let {
+                    add("--identity")
+                    add(it)
+                }
+            }
+
+            BundleTarget.ANDROID -> {
+                credentials.androidKeystore?.let {
+                    add("--keystore")
+                    add(it)
+                }
+                credentials.androidKeystorePass?.let {
+                    add("--keystore-pass")
+                    add(it)
+                }
+                credentials.androidKeystoreAlias?.let {
+                    add("--keystore-alias")
+                    add(it)
+                }
+            }
+
+            else -> Unit
+        }
     }
 
     private const val BUILD_REPORT_PATH = "build/report.html"
@@ -89,3 +139,33 @@ data class BundleOptions(
     val withSymbols: Boolean = false,
     val liveUpdate: Boolean = false
 )
+
+/**
+ * Signing + server + private-dep credentials threaded into Bob's bundle invocation.
+ *
+ * Mirrors Defold Kit's `defoldKit.bundle.*` settings (docs/04-deep-dives.md §3). Persisted
+ * in [com.aridclown.intellij.defold.settings.DefoldSettings] and provided per bundle by
+ * the bundle action.
+ */
+data class BundleCredentials(
+    val iosProvisioningDebug: String? = null,
+    val iosProvisioningRelease: String? = null,
+    val iosIdentityDebug: String? = null,
+    val iosIdentityRelease: String? = null,
+    val androidKeystore: String? = null,
+    val androidKeystorePass: String? = null,
+    val androidKeystoreAlias: String? = null,
+    val buildServer: String? = null,
+    val privateDepEmail: String? = null,
+    val privateDepAuth: String? = null
+) {
+    fun iosProvisioningFor(variant: BundleVariant): String? = when (variant) {
+        BundleVariant.DEBUG -> iosProvisioningDebug
+        BundleVariant.RELEASE -> iosProvisioningRelease
+    }
+
+    fun iosIdentityFor(variant: BundleVariant): String? = when (variant) {
+        BundleVariant.DEBUG -> iosIdentityDebug
+        BundleVariant.RELEASE -> iosIdentityRelease
+    }
+}
