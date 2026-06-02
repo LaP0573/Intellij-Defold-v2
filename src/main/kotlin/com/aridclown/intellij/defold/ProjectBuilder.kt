@@ -2,6 +2,8 @@ package com.aridclown.intellij.defold
 
 import com.aridclown.intellij.defold.DefoldConstants.BOB_MAIN_CLASS
 import com.aridclown.intellij.defold.DefoldProjectService.Companion.rootProjectFolder
+import com.aridclown.intellij.defold.build.BobProblemProcessListener
+import com.aridclown.intellij.defold.build.BobProblemReporter.Companion.bobProblemReporterOrNull
 import com.aridclown.intellij.defold.process.BackgroundProcessRequest
 import com.aridclown.intellij.defold.process.ProcessExecutor
 import com.aridclown.intellij.defold.util.printError
@@ -60,6 +62,7 @@ class ProjectBuilder(
                     project = request.project,
                     title = buildMessage,
                     command = command,
+                    processListeners = listOf(BobProblemProcessListener { request.project.bobProblemReporterOrNull() }),
                     onSuccess = {
                         if (continuation.isActive) continuation.resume(Result.success(Unit))
                     },

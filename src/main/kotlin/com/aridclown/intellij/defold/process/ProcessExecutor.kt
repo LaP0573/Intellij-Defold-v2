@@ -6,6 +6,7 @@ import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessAdapter
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.ui.ConsoleView
 import com.intellij.openapi.project.Project
 import com.intellij.platform.ide.progress.withBackgroundProgress
@@ -23,6 +24,7 @@ class ProcessExecutor(
                 runCatching {
                     DefoldProcessHandler(command).apply {
                         console?.attachToProcess(this)
+                        processListeners.forEach(::addProcessListener)
                         addProcessListener(ProcessTerminationListener(onSuccess, onFailure))
                         startNotify()
                         waitFor()
@@ -53,6 +55,7 @@ data class BackgroundProcessRequest(
     val project: Project,
     val title: String,
     val command: GeneralCommandLine,
+    val processListeners: List<ProcessListener> = emptyList(),
     val onSuccess: () -> Unit = {},
     val onFailure: (Int) -> Unit = {}
 )
