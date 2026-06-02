@@ -111,6 +111,10 @@
             <action id="ResolveDefoldDependencies"
                     text="Resolve Dependencies"
                     class="com.aridclown.intellij.defold.actions.ResolveDependenciesAction"/>
+            <action id="DeployDefoldBundle"
+                    text="Deploy Bundle to Device"
+                    description="Install the latest bundled .ipa/.apk on a connected device (ios-deploy / adb)"
+                    class="com.aridclown.intellij.defold.actions.DeployAction"/>
             <action id="ReloadDefoldAnnotations"
                     text="Reload Defold Annotations"
                     class="com.aridclown.intellij.defold.actions.ReloadAnnotationsAction"/>
