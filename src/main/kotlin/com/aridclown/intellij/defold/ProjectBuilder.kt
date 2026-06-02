@@ -62,7 +62,12 @@ class ProjectBuilder(
                     project = request.project,
                     title = buildMessage,
                     command = command,
-                    processListeners = listOf(BobProblemProcessListener { request.project.bobProblemReporterOrNull() }),
+                    processListeners =
+                    listOf(
+                        BobProblemProcessListener(buildMessage) {
+                            request.project.bobProblemReporterOrNull()
+                        }
+                    ),
                     onSuccess = {
                         if (continuation.isActive) continuation.resume(Result.success(Unit))
                     },

@@ -14,12 +14,16 @@ import com.intellij.openapi.util.Key
  * silently dropped and Bob output remains plain console text.
  */
 class BobProblemProcessListener(
+    private val buildTitle: String,
     private val reporterProvider: () -> BobProblemReporter?
 ) : ProcessListener {
     private val buffer = StringBuilder()
+    private var started = false
 
     override fun startNotified(event: ProcessEvent) {
-        reporterProvider()?.resetForNewRun()
+        val reporter = reporterProvider() ?: return
+        reporter.startRun(buildTitle)
+        started = true
     }
 
     override fun onTextAvailable(
@@ -40,6 +44,10 @@ class BobProblemProcessListener(
         if (buffer.isNotEmpty()) {
             handleLine(buffer.toString())
             buffer.setLength(0)
+        }
+        if (started) {
+            reporterProvider()?.finishRun(success = event.exitCode == 0)
+            started = false
         }
     }
 
